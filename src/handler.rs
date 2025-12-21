@@ -48,9 +48,7 @@ impl OnIterationComplete for CompleteHandler {
 }
 
 pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> impl Responder {
-
-    let should_log = req.method().as_str() == "POST" ;
-    info!("Принят {} запрос на {} требуется запись в лог {}", req.method(), req.path(), should_log);
+    info!("Принят {} запрос на {}", req.method(), req.path());
 
     let target_url = match format_target_url(&data.target_url, &req) {
         Ok(url) => url,

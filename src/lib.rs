@@ -45,7 +45,8 @@ impl Stream for CompletableStream {
                     Some(byte_res) => {
                         match byte_res {
                             Ok(bytes) => {
-                                this.handler.on_iteration_complete(bytes.to_vec());
+                                // this.handler.on_iteration_complete(bytes.to_vec());
+                                this.buffer.extend_from_slice(&bytes[..]);
                             },
                             Err(e) => error!("Ошибка получения данных запроса {}", e)
                         }
