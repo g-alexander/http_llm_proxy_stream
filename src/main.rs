@@ -7,26 +7,26 @@ use reqwest::{Client, Url};
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// Порт, на котором будет слушать сервис
+    /// Port on which the service will listen
     #[arg(short, long, default_value = "8080")]
     port: u16,
 
-    /// URL, куда проксировать запросы
+    /// URL to proxy requests to
     #[arg(short, long)]
     target_url: String,
 
-    /// Дополнительный HTTP заголовок в формате "Header-Name: Header-Value"
+    /// Additional HTTP header in format "Header-Name: Header-Value"
     #[arg(short, long)]
     add_header: Option<String>,
 
-    /// Наименование файла слогами.
+    /// Name of the log file
     #[arg(short, long, default_value = "log.csv")]
     log_file: String,
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Инициализируем логгер с явной настройкой вывода в консоль
+    // Initialize logger with explicit console output configuration
     env_logger::Builder::from_default_env()
         .filter_level(log::LevelFilter::Info)
         .target(env_logger::Target::Stdout)
@@ -34,14 +34,14 @@ async fn main() -> std::io::Result<()> {
 
     let args = Args::parse();
 
-    info!("Запуск HTTP прокси-сервиса");
-    info!("Порт: {}", args.port);
+    info!("Starting HTTP proxy service");
+    info!("Port: {}", args.port);
     info!("Target URL: {}", args.target_url);
-    info!("Файл с логом: {}", args.log_file);
+    info!("Log file: {}", args.log_file);
 
-    // Валидация target URL
+    // Validate target URL
     if let Err(e) = Url::parse(&args.target_url) {
-        error!("Неверный формат target URL: {}", e);
+        error!("Invalid target URL format: {}", e);
         std::process::exit(1);
     }
 
@@ -60,7 +60,7 @@ async fn main() -> std::io::Result<()> {
     let client = Client::builder()
         .timeout(std::time::Duration::from_secs(30))
         .build()
-        .expect("Не удалось создать HTTP клиент");
+        .expect("Failed to create HTTP client");
 
     let app_state = web::Data::new(AppState {
         target_url: args.target_url,

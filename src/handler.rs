@@ -2,14 +2,14 @@ use crate::{log_post_request_to_csv, AppState, CompletableStream, OnIterationCom
 use actix_web::http::StatusCode;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use flate2::read::GzDecoder;
-use log::{error, info, warn};
+use log::{error, info, trace, warn};
 use reqwest::Url;
 use std::io::Read;
 
 fn format_target_url(base_url: &str, req: &HttpRequest) -> Result<String, Box<dyn std::error::Error>> {
     let mut url = Url::parse(base_url)?;
 
-    // Добавляем путь и query параметры из исходного запроса
+    // Add path and query parameters from the original request
     url.set_path(req.path());
     url.set_query(req.uri().query());
 
@@ -35,7 +35,7 @@ impl OnIterationComplete for CompleteHandler {
         if data.is_empty() {
             return;
         }
-        info!("Вызван метод завершения чтения потока. Размер данных: {}", data.len());
+        info!("Stream completion handler called. Data size: {}", data.len());
         let response_data ;
         if self.gzip {
             let mut decoded = Vec::new();
@@ -50,17 +50,17 @@ impl OnIterationComplete for CompleteHandler {
 }
 
 pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<AppState>) -> impl Responder {
-    info!("Принят {} запрос на {}", req.method(), req.path());
+    info!("Received {} request on {}", req.method(), req.path());
 
     let target_url = match format_target_url(&data.target_url, &req) {
         Ok(url) => url,
         Err(e) => {
-            error!("Ошибка формирования URL: {}", e);
-            return HttpResponse::InternalServerError().json("Ошибка формирования URL");
+            error!("URL formatting error: {}", e);
+            return HttpResponse::InternalServerError().json("URL formatting error");
         }
     };
     let method = req.method().as_str().to_string();
-    // Создаем HTTP запрос к целевому серверу
+    // Create HTTP request to target server
     let mut request_builder = match method.as_str() {
         "GET" => data.client.get(&target_url),
         "POST" => data.client.post(&target_url),
@@ -68,14 +68,14 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
         "DELETE" => data.client.delete(&target_url),
         "PATCH" => data.client.patch(&target_url),
         method => {
-            warn!("Неподдерживаемый метод HTTP: {}", method);
-            return HttpResponse::BadRequest().json(format!("Неподдерживаемый метод: {}", method));
+            warn!("Unsupported HTTP method: {}", method);
+            return HttpResponse::BadRequest().json(format!("Unsupported method: {}", method));
         }
     };
 
-    // Копируем заголовки из входящего запроса
+    // Copy headers from incoming request
     for (header_name, header_value) in req.headers() {
-        // Пропускаем некоторые заголовки, которые могут вызвать проблемы
+        // Skip some headers that may cause problems
         if header_name.as_str().to_lowercase() == "host" {
             continue;
         }
@@ -92,7 +92,7 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
     if let Some(h) = &data.additional_header {
         request_builder = request_builder.header(h.0.as_str(), h.1.as_str());
     }
-    // Добавляем тело запроса для POST, PUT, PATCH
+    // Add request body for POST, PUT, PATCH
     if matches!(req.method().as_str(), "POST" | "PUT" | "PATCH") && !body.is_empty() {
         request_builder = request_builder.body(body.to_vec());
     }
@@ -110,7 +110,7 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                 if key.to_lowercase() == "content-encoding" && val.to_lowercase() == "gzip" {
                     gzip = true;
                 }
-                println!("Header: {}: {}", key, val);
+                trace!("Header: {}: {}", key, val);
             });
             let mut client_response = HttpResponse::build(StatusCode::from_u16(response.status().as_u16()).unwrap());
             for (header_name, header_value) in response.headers() {
@@ -120,12 +120,12 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                                                 Box::new(CompleteHandler::new(gzip, method, url, request_body,
                                                                               data.log_file.clone())));
             let res = client_response.streaming(Box::pin(stream));
-            info!("Поток запроса передан на обработку");
+            info!("Request stream passed for processing");
             res
         },
         Err(e) => {
-                error!("Ошибка выполнения запроса: {}", e);
-                HttpResponse::BadGateway().json("Ошибка выполнения запроса к целевому серверу")
+                error!("Request execution error: {}", e);
+                HttpResponse::BadGateway().json("Request execution error to target server")
             }
         }
 }

@@ -49,18 +49,18 @@ impl Stream for CompletableStream {
                                 // this.handler.on_iteration_complete(bytes.to_vec());
                                 this.buffer.extend_from_slice(&bytes[..]);
                             },
-                            Err(e) => error!("Ошибка получения данных запроса {}", e)
+                            Err(e) => error!("Error receiving request data: {}", e)
                         }
                         // this.handler.on_iteration_complete(bytes.to_vec());
                     },
                     None => {
                         this.handler.on_iteration_complete(this.buffer.to_vec());
-                        info!("Получено Ready - None из потока");
+                        info!("Received Ready - None from stream");
                     }
                 }
             },
             Poll::Pending => {
-                info!("Получено Pending из потока");
+                info!("Received Pending from stream");
             }
         }
         result
@@ -73,7 +73,7 @@ impl Stream for CompletableStream {
 
 fn log_post_request_to_csv(method: &str, url: &str, request_body: &str, response_body: &str,
                            file_name: &str) {
-    // Экранируем кавычки в данных для CSV формата
+    // Escape quotes in data for CSV format
     let request_body_escaped = request_body.replace('"', "\"\"");
     let response_body_escaped = response_body.replace('"', "\"\"");
 
@@ -87,13 +87,13 @@ fn log_post_request_to_csv(method: &str, url: &str, request_body: &str, response
             match file.write_all(csv_line.as_bytes()) {
                 Ok(_) => {
                     match file.flush() {
-                        Ok(_) => info!("Запись в лог произведена успешно, записано {} символов.", csv_line.len()),
-                        Err(e) => error!("Ошибка финализации записи в файл: {}", e)
+                        Ok(_) => info!("Log write successful, wrote {} characters.", csv_line.len()),
+                        Err(e) => error!("Error finalizing file write: {}", e)
                     }
                 },
-                Err(e) => error!("Ошибка записи в файл: {}", e)
+                Err(e) => error!("Error writing to file: {}", e)
             }
         },
-        Err(e) => error!("Ошибка открытия файла: {}", e)
+        Err(e) => error!("Error opening file: {}", e)
     }
 }
