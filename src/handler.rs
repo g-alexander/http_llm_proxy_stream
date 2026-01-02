@@ -20,12 +20,13 @@ struct CompleteHandler {
     gzip: bool,
     method: String,
     query: String,
-    request_data: String
+    request_data: String,
+    file_name: String,
 }
 
 impl CompleteHandler {
-    fn new(gzip: bool, method: String, query: String, request_data: String) -> CompleteHandler {
-        CompleteHandler {gzip, method, query, request_data}
+    fn new(gzip: bool, method: String, query: String, request_data: String, file_name: String) -> CompleteHandler {
+        CompleteHandler {gzip, method, query, request_data, file_name}
     }
 }
 
@@ -43,7 +44,8 @@ impl OnIterationComplete for CompleteHandler {
         } else {
             response_data = String::from_utf8_lossy(&data[..]).to_string();
         }
-        log_post_request_to_csv(&self.method, &self.query, &self.request_data, &response_data);
+        log_post_request_to_csv(&self.method, &self.query, &self.request_data, &response_data,
+                                &self.file_name);
     }
 }
 
@@ -115,7 +117,8 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
                 client_response.insert_header((header_name.as_str(), header_value.to_str().unwrap()));
             }
             let stream = CompletableStream::new(Box::from(response.bytes_stream()),
-                                                Box::new(CompleteHandler::new(gzip, method, url, request_body)));
+                                                Box::new(CompleteHandler::new(gzip, method, url, request_body,
+                                                                              data.log_file.clone())));
             let res = client_response.streaming(Box::pin(stream));
             info!("Поток запроса передан на обработку");
             res

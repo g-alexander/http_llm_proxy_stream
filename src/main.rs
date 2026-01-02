@@ -18,6 +18,10 @@ struct Args {
     /// Дополнительный HTTP заголовок в формате "Header-Name: Header-Value"
     #[arg(short, long)]
     add_header: Option<String>,
+
+    /// Наименование файла слогами.
+    #[arg(short, long, default_value = "log.csv")]
+    log_file: String,
 }
 
 #[actix_web::main]
@@ -33,6 +37,7 @@ async fn main() -> std::io::Result<()> {
     info!("Запуск HTTP прокси-сервиса");
     info!("Порт: {}", args.port);
     info!("Target URL: {}", args.target_url);
+    info!("Файл с логом: {}", args.log_file);
 
     // Валидация target URL
     if let Err(e) = Url::parse(&args.target_url) {
@@ -60,7 +65,8 @@ async fn main() -> std::io::Result<()> {
     let app_state = web::Data::new(AppState {
         target_url: args.target_url,
         client,
-        additional_header: header
+        additional_header: header,
+        log_file: args.log_file,
     });
 
     let server = HttpServer::new(move || {

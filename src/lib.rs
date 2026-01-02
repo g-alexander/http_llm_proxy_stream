@@ -15,6 +15,7 @@ pub struct AppState {
     pub target_url: String,
     pub client: Client,
     pub additional_header: Option<(String, String)>,
+    pub log_file: String,
 }
 
 pub trait OnIterationComplete {
@@ -70,7 +71,8 @@ impl Stream for CompletableStream {
     }
 }
 
-fn log_post_request_to_csv(method: &str, url: &str, request_body: &str, response_body: &str) {
+fn log_post_request_to_csv(method: &str, url: &str, request_body: &str, response_body: &str,
+                           file_name: &str) {
     // Экранируем кавычки в данных для CSV формата
     let request_body_escaped = request_body.replace('"', "\"\"");
     let response_body_escaped = response_body.replace('"', "\"\"");
@@ -80,10 +82,18 @@ fn log_post_request_to_csv(method: &str, url: &str, request_body: &str, response
         method, url, request_body_escaped, response_body_escaped
     );
 
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open("log.csv").unwrap();
-
-    file.write_all(csv_line.as_bytes()).unwrap();
+    match OpenOptions::new().create(true).append(true).open(file_name) {
+        Ok(mut file) => {
+            match file.write_all(csv_line.as_bytes()) {
+                Ok(_) => {
+                    match file.flush() {
+                        Ok(_) => info!("Запись в лог произведена успешно, записано {} символов.", csv_line.len()),
+                        Err(e) => error!("Ошибка финализации записи в файл: {}", e)
+                    }
+                },
+                Err(e) => error!("Ошибка записи в файл: {}", e)
+            }
+        },
+        Err(e) => error!("Ошибка открытия файла: {}", e)
+    }
 }
