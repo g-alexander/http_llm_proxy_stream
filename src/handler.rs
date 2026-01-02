@@ -1,10 +1,11 @@
-use crate::{log_post_request_to_csv, AppState, CompletableStream, OnIterationComplete};
+use crate::{AppState, CompletableStream, OnIterationComplete, LogWriter};
 use actix_web::http::StatusCode;
 use actix_web::{web, HttpRequest, HttpResponse, Responder};
 use flate2::read::GzDecoder;
 use log::{error, info, trace, warn};
 use reqwest::Url;
 use std::io::Read;
+use std::sync::{Arc, Mutex};
 
 fn format_target_url(base_url: &str, req: &HttpRequest) -> Result<String, Box<dyn std::error::Error>> {
     let mut url = Url::parse(base_url)?;
@@ -21,12 +22,12 @@ struct CompleteHandler {
     method: String,
     query: String,
     request_data: String,
-    file_name: String,
+    log_writer: Arc<Mutex<LogWriter>>,
 }
 
 impl CompleteHandler {
-    fn new(gzip: bool, method: String, query: String, request_data: String, file_name: String) -> CompleteHandler {
-        CompleteHandler {gzip, method, query, request_data, file_name}
+    fn new(gzip: bool, method: String, query: String, request_data: String, log_writer: Arc<Mutex<LogWriter>>) -> CompleteHandler {
+        CompleteHandler {gzip, method, query, request_data, log_writer}
     }
 }
 
@@ -36,16 +37,24 @@ impl OnIterationComplete for CompleteHandler {
             return;
         }
         info!("Stream completion handler called. Data size: {}", data.len());
-        let response_data ;
-        if self.gzip {
+        let response_data = if self.gzip {
             let mut decoded = Vec::new();
-            GzDecoder::new(&data[..]).read_to_end(&mut decoded).unwrap();
-            response_data = String::from_utf8_lossy(&decoded).to_string();
+            match GzDecoder::new(&data[..]).read_to_end(&mut decoded) {
+                Ok(_) => String::from_utf8_lossy(&decoded).to_string(),
+                Err(e) => {
+                    error!("Failed to decode gzip response: {}", e);
+                    format!("[GZIP DECODE ERROR: {}]", e)
+                }
+            }
         } else {
-            response_data = String::from_utf8_lossy(&data[..]).to_string();
+            String::from_utf8_lossy(&data[..]).to_string()
+        };
+        
+        if let Ok(log_writer) = self.log_writer.lock() {
+            log_writer.write_log(&self.method, &self.query, &self.request_data, &response_data);
+        } else {
+            error!("Failed to acquire log_writer lock");
         }
-        log_post_request_to_csv(&self.method, &self.query, &self.request_data, &response_data,
-                                &self.file_name);
     }
 }
 
@@ -105,20 +114,36 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
             let mut gzip = false;
             let headers = response.headers().clone();
             headers.into_iter().for_each(|(k, v)| {
-                let key = k.unwrap().as_str().to_owned();
-                let val = v.to_str().unwrap().to_owned();
-                if key.to_lowercase() == "content-encoding" && val.to_lowercase() == "gzip" {
-                    gzip = true;
+                if let Some(key) = k {
+                    let key_str = key.as_str();
+                    if let Ok(val) = v.to_str() {
+                        if key_str.to_lowercase() == "content-encoding" && val.to_lowercase() == "gzip" {
+                            gzip = true;
+                        }
+                        trace!("Header: {}: {}", key_str, val);
+                    }
                 }
-                trace!("Header: {}: {}", key, val);
             });
-            let mut client_response = HttpResponse::build(StatusCode::from_u16(response.status().as_u16()).unwrap());
+            
+            let status = match StatusCode::from_u16(response.status().as_u16()) {
+                Ok(s) => s,
+                Err(e) => {
+                    error!("Invalid status code: {}", e);
+                    return HttpResponse::InternalServerError().finish();
+                }
+            };
+            
+            let mut client_response = HttpResponse::build(status);
             for (header_name, header_value) in response.headers() {
-                client_response.insert_header((header_name.as_str(), header_value.to_str().unwrap()));
+                if let Ok(header_value_str) = header_value.to_str() {
+                    client_response.insert_header((header_name.as_str(), header_value_str));
+                } else {
+                    warn!("Skipping non-string header value for: {}", header_name.as_str());
+                }
             }
             let stream = CompletableStream::new(Box::from(response.bytes_stream()),
                                                 Box::new(CompleteHandler::new(gzip, method, url, request_body,
-                                                                              data.log_file.clone())));
+                                                                              data.log_writer.clone())));
             let res = client_response.streaming(Box::pin(stream));
             info!("Request stream passed for processing");
             res

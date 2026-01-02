@@ -1,8 +1,9 @@
 use actix_web::{web, App, HttpServer};
 use clap::Parser;
-use http_llm_proxy_stream::{proxy_handler, AppState};
+use http_llm_proxy_stream::{proxy_handler, AppState, LogWriter};
 use log::{error, info};
 use reqwest::{Client, Url};
+use std::sync::Arc;
 
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
@@ -62,11 +63,13 @@ async fn main() -> std::io::Result<()> {
         .build()
         .expect("Failed to create HTTP client");
 
+    let log_writer = LogWriter::new(args.log_file.clone());
+    
     let app_state = web::Data::new(AppState {
         target_url: args.target_url,
         client,
         additional_header: header,
-        log_file: args.log_file,
+        log_writer: Arc::new(std::sync::Mutex::new(log_writer)),
     });
 
     let server = HttpServer::new(move || {
