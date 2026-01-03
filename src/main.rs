@@ -23,6 +23,10 @@ struct Args {
     /// Name of the log file
     #[arg(short, long, default_value = "log.csv")]
     log_file: String,
+
+    /// Request timeout in minutes
+    #[arg(short = 'T', long, default_value = "3")]
+    timeout: u64,
 }
 
 #[actix_web::main]
@@ -70,6 +74,7 @@ async fn main() -> std::io::Result<()> {
         client,
         additional_header: header,
         log_writer: Arc::new(std::sync::Mutex::new(log_writer)),
+        request_timeout_minutes: args.timeout,
     });
 
     let server = HttpServer::new(move || {

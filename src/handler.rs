@@ -6,6 +6,7 @@ use log::{error, info, trace, warn};
 use reqwest::Url;
 use std::io::Read;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 fn format_target_url(base_url: &str, req: &HttpRequest) -> Result<String, Box<dyn std::error::Error>> {
     let mut url = Url::parse(base_url)?;
@@ -109,7 +110,7 @@ pub async fn proxy_handler(req: HttpRequest, body: web::Bytes, data: web::Data<A
     let url = req.uri().to_string();
     let request_body = String::from_utf8_lossy(body.to_vec().as_slice()).to_string();
 
-    match request_builder.send().await {
+    match request_builder.timeout(Duration::from_mins(data.request_timeout_minutes)).send().await {
         Ok(response) => {
             let mut gzip = false;
             let headers = response.headers().clone();

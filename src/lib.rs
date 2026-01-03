@@ -17,6 +17,7 @@ pub struct AppState {
     pub client: Client,
     pub additional_header: Option<(String, String)>,
     pub log_writer: Arc<Mutex<LogWriter>>,
+    pub request_timeout_minutes: u64,
 }
 
 pub struct LogWriter {

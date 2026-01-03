@@ -50,6 +50,7 @@ cargo run -- \
 | `--target-url` | `-t` | URL to proxy requests to | **required** |
 | `--add-header` | `-a` | Additional header in format "Name: Value" | - |
 | `--log-file` | `-l` | Log file name | `log.csv` |
+| `--timeout` | `-T` | Request timeout in minutes | `3` |
 
 ## Examples
 
